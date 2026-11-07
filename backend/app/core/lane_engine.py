@@ -8,8 +8,8 @@
 
 Правила перехода состояния очереди для одного трека:
 
-    moving --(speed < stop_enter_speed внутри queue_zone, непрерывно
-               stop_duration_threshold_sec)--> waiting
+    moving --(внутри queue_zone и не дальше stop_max_drift_bbox_h от места
+               остановки, непрерывно stop_duration_threshold_sec)--> waiting
 
     waiting --(speed > stop_exit_speed ИЛИ вышел из queue_zone, непрерывно
                 queue_exit_duration_sec)--> moving
@@ -17,7 +17,15 @@
 Короткий провал ниже stop_exit_speed во время отсчёта выхода НЕ сбрасывает
 накопленное wait_start — обнуляется только таймер подтверждения выхода
 (moving_candidate_since), а не момент начала ожидания. Так единичный толчок
-на 0.3 с в пробке не "обнуляет" накопленное ожидание машины.
+на 0.3 с в пробке не "обнуляет" накопленное ожидание машины. stop_exit_speed
+выше скорости подтягивания в очереди, поэтому подтягивание за передней
+машиной тоже не считается отъездом.
+
+Стоящая машина, которую детектор временно потерял, удерживается
+stationary_track_retention_sec и продолжает считаться в очереди. Если трекер
+вернул её под новым ID рядом с прежним местом (или с рамкой, перекрывающей
+прежнюю, — у частично закрытой машины), состояние (включая wait_start)
+переходит к новому ID — иначе каждый сбой трекинга обнулял бы ожидание.
 
 Скорость нормируется на высоту рамки машины (px/px в секунду), что частично
 компенсирует перспективу: чем ближе к камере (крупнее рамка), тем больше
@@ -54,6 +62,14 @@ def reference_point(bbox: BBox, mode: ReferencePointMode) -> Point:
     return ((x1 + x2) / 2, (y1 + y2) / 2)
 
 
+def _overlap_of_smaller(a: BBox, b: BBox) -> float:
+    """Площадь пересечения рамок, делённая на площадь меньшей из них."""
+    iw = max(0.0, min(a[2], b[2]) - max(a[0], b[0]))
+    ih = max(0.0, min(a[3], b[3]) - max(a[1], b[1]))
+    smaller = min((a[2] - a[0]) * (a[3] - a[1]), (b[2] - b[0]) * (b[3] - b[1]))
+    return iw * ih / smaller if smaller > 0 else 0.0
+
+
 @dataclass
 class Detection:
     track_id: int
@@ -69,6 +85,7 @@ class TrackState:
     last_seen_time: float
     last_raw_point: Point
     last_bbox: BBox
+    first_seen_time: float = 0.0
     # (t, point, bbox_h); maxlen — лишь защита от неограниченного роста при
     # аномально высоком fps источника, реальная обрезка — по времени (см.
     # trim_point_history), не по количеству точек.
@@ -80,11 +97,13 @@ class TrackState:
 
     queue_state: str = "moving"  # moving | waiting
     stop_candidate_since: float | None = None
+    stop_anchor: Point | None = None  # усреднённая точка в момент остановки
     wait_start: float | None = None
     moving_candidate_since: float | None = None
 
     crossed_lines: set = field(default_factory=set)
     visible_this_tick: bool = True
+
 
     def trim_point_history(self, speed_window_sec: float) -> None:
         """Обрезает историю точек по ВРЕМЕНИ, оставляя всегда минимум 2 точки.
@@ -108,6 +127,12 @@ class TrackState:
         ys = sum(p[1] for (_, p, _) in self.point_history)
         n = len(self.point_history)
         return (xs / n, ys / n)
+
+    def smoothed_time(self) -> float:
+        """Среднее время отсчётов, по которым считается smoothed_point()."""
+        if not self.point_history:
+            return self.last_seen_time
+        return sum(t for (t, _, _) in self.point_history) / len(self.point_history)
 
     def smoothed_speed(self) -> float:
         """Нормированная скорость: смещение опорной точки / высота рамки / время.
@@ -214,9 +239,76 @@ class AnalyticsEngine:
                 return lane.reference_point_mode
         return self.profile.reference_point_mode
 
+    def _is_stationary(self, track: TrackState) -> bool:
+        """В очереди или стоит уже не меньше половины stop_duration_threshold_sec.
+        Кандидат в остановку появляется у любой машины в зоне очереди, поэтому
+        без выдержки удержание и перенос ID доставались бы и едущим машинам."""
+        if track.queue_state == "waiting":
+            return True
+        since = track.stop_candidate_since
+        return since is not None and (
+            track.last_seen_time - since >= self.params.stop_duration_threshold_sec / 2
+        )
+
+    def _retention_sec(self, track: TrackState) -> float:
+        if self._is_stationary(track):
+            return max(self.params.stationary_track_retention_sec, self.params.track_lost_grace_sec)
+        return self.params.track_lost_grace_sec
+
+    def _is_present(self, track: TrackState, now: float) -> bool:
+        return now - track.last_seen_time <= self._retention_sec(track)
+
+    def _same_vehicle(self, lost: TrackState, new: TrackState) -> bool:
+        params = self.params
+        if new.first_seen_time < lost.last_seen_time - params.reid_new_track_window_sec:
+            return False  # давно существующий трек — это соседняя машина
+        h = max(lost.last_bbox[3] - lost.last_bbox[1], new.last_bbox[3] - new.last_bbox[1], 1.0)
+        (lx, ly), (nx, ny) = lost.last_raw_point, new.last_raw_point
+        if ((lx - nx) ** 2 + (ly - ny) ** 2) ** 0.5 <= params.reid_max_distance_bbox_h * h:
+            return True
+        return _overlap_of_smaller(lost.last_bbox, new.last_bbox) >= params.reid_min_box_overlap
+
+    def _merge_reappeared(self, now: float, frame_ids: set) -> None:
+        """Потерянная стоящая машина, на месте которой трекер завёл новый ID, —
+        та же машина: новый трек получает её ожидание, старый удаляется (иначе
+        машина ещё stationary_track_retention_sec считалась бы дважды)."""
+        lost_ids = [
+            tid for tid, t in self.tracks.items()
+            if tid not in frame_ids and self._is_stationary(t)
+        ]
+        for lost_id in lost_ids:
+            lost = self.tracks[lost_id]
+            match = next(
+                (
+                    t for tid, t in self.tracks.items()
+                    if tid in frame_ids and self._same_vehicle(lost, t)
+                ),
+                None,
+            )
+            if match is None:
+                continue
+            if lost.queue_state == "waiting" and (
+                match.queue_state != "waiting" or lost.wait_start < match.wait_start
+            ):
+                match.queue_state = "waiting"
+                match.wait_start = lost.wait_start
+                match.moving_candidate_since = None
+            elif match.queue_state == "moving" and lost.stop_candidate_since is not None and (
+                match.stop_candidate_since is None
+                or lost.stop_candidate_since < match.stop_candidate_since
+            ):
+                match.stop_candidate_since = lost.stop_candidate_since
+                match.stop_anchor = match.smoothed_point()
+            match.crossed_lines |= lost.crossed_lines
+            for runtime in self.lanes.values():
+                # Состав считается по уникальным машинам, а не по ID трекера.
+                runtime.seen_track_classes.pop(lost_id, None)
+            del self.tracks[lost_id]
+
     def update(self, now: float, detections: list[Detection]) -> None:
         params = self.params
         seen_ids = set()
+        frame_ids = {d.track_id for d in detections}
 
         for det in detections:
             seen_ids.add(det.track_id)
@@ -237,6 +329,7 @@ class AnalyticsEngine:
                     last_seen_time=now,
                     last_raw_point=point,
                     last_bbox=det.bbox,
+                    first_seen_time=now,
                 )
                 track.point_history.append((now, point, bbox_h))
                 self.tracks[det.track_id] = track
@@ -272,9 +365,9 @@ class AnalyticsEngine:
             # --- Состояние очереди ---
             lane_id = track.assigned_lane
             in_queue_zone = False
+            smoothed = track.smoothed_point()
             if lane_id is not None:
                 lane_runtime = self.lanes[lane_id]
-                smoothed = track.smoothed_point()
                 px_norm = (smoothed[0] / self.frame_w, smoothed[1] / self.frame_h)
                 in_queue_zone = lane_runtime.lane.queue_zone_polygon.contains(px_norm)
                 lane_runtime.seen_track_classes[track.track_id] = track.cls
@@ -282,15 +375,29 @@ class AnalyticsEngine:
             speed = track.smoothed_speed()
 
             if track.queue_state == "moving":
-                if in_queue_zone and speed < params.stop_enter_speed:
-                    if track.stop_candidate_since is None:
-                        track.stop_candidate_since = now
-                    elif now - track.stop_candidate_since >= params.stop_duration_threshold_sec:
+                if in_queue_zone:
+                    anchor = track.stop_anchor
+                    drift = (
+                        ((smoothed[0] - anchor[0]) ** 2 + (smoothed[1] - anchor[1]) ** 2) ** 0.5 / bbox_h
+                        if anchor is not None
+                        else None
+                    )
+                    smoothed_t = track.smoothed_time()
+                    if drift is None or drift > params.stop_max_drift_bbox_h:
+                        # Ещё едет: отсчёт стояния начинается заново с текущего места.
+                        # Время якоря — среднее время тех же отсчётов, что и точка:
+                        # у нового трека в истории одна точка без запаздывания, и
+                        # сравнение с now укоротило бы окно (на реальном видео так в
+                        # очередь попала машина, ехавшая издалека прямо на камеру).
+                        track.stop_anchor = smoothed
+                        track.stop_candidate_since = smoothed_t
+                    elif smoothed_t - track.stop_candidate_since >= params.stop_duration_threshold_sec:
                         track.queue_state = "waiting"
                         track.wait_start = track.stop_candidate_since
                         track.moving_candidate_since = None
                 else:
                     track.stop_candidate_since = None
+                    track.stop_anchor = None
             else:  # waiting
                 left_zone = not in_queue_zone
                 fast_enough = speed > params.stop_exit_speed
@@ -301,6 +408,7 @@ class AnalyticsEngine:
                         track.queue_state = "moving"
                         track.wait_start = None
                         track.stop_candidate_since = None
+                        track.stop_anchor = None
                         track.moving_candidate_since = None
                 else:
                     track.moving_candidate_since = None
@@ -326,14 +434,15 @@ class AnalyticsEngine:
             track.last_raw_point = point
             track.last_seen_time = now
 
+        self._merge_reappeared(now, frame_ids)
+
         # --- Треки, не замеченные на этом тике: проверка периода удержания ---
-        grace = params.track_lost_grace_sec
         to_delete = []
         for tid, track in self.tracks.items():
             if tid in seen_ids:
                 continue
             track.visible_this_tick = False
-            if now - track.last_seen_time > grace:
+            if not self._is_present(track, now):
                 to_delete.append(tid)
         for tid in to_delete:
             del self.tracks[tid]
@@ -345,8 +454,7 @@ class AnalyticsEngine:
             current_tracks = [
                 t
                 for t in self.tracks.values()
-                if t.assigned_lane == lane_id
-                and (now - t.last_seen_time) <= self.params.track_lost_grace_sec
+                if t.assigned_lane == lane_id and self._is_present(t, now)
             ]
             waiting_tracks = [t for t in current_tracks if t.queue_state == "waiting"]
             waits = [now - t.wait_start for t in waiting_tracks if t.wait_start is not None]
