@@ -1,0 +1,20 @@
+# Backend
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/.pytest_cache/
+backend/data/
+*.pyc
+
+# Загруженные веса модели (скачиваются автоматически при первом запуске)
+*.pt
+
+# Результаты прогонов анализа (большие видео + данные)
+output/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+
+# ОС/редакторы
+.DS_Store

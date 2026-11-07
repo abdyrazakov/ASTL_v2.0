@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+/* Системный стек шрифтов — без обращения к внешним CDN, приложение должно
+   работать полностью локально после установки (требование офлайн-работы). */
+:root {
+  --font-ui: -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    "Noto Sans", sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", "Cascadia Code",
+    Consolas, "Liberation Mono", monospace;
+
+  --bg: #0e1416;
+  --surface: #161e21;
+  --surface-raised: #1c2529;
+  --surface-sunken: #0b1012;
+  --border: #2a363b;
+  --border-strong: #3a4a51;
+  --text: #e8edef;
+  --text-muted: #8fa3a9;
+  --text-faint: #5c6e74;
+
+  --accent-teal: #2dd4bf;
+  --accent-teal-dim: #1c7d72;
+  --accent-sky: #38bdf8;
+  --accent-amber: #f5a623;
+  --accent-red: #ef4444;
+  --accent-violet: #a78bfa;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+
+.font-mono-tab {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--accent-teal-dim);
+  color: #fff;
+}
+
+/* Видимый фокус для доступности с клавиатуры */
+:focus-visible {
+  outline: 2px solid var(--accent-teal);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Пульсация индикатора активного задания — единственная намеренная анимация */
+@keyframes live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.live-dot {
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: var(--surface-sunken);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 6px;
+}
