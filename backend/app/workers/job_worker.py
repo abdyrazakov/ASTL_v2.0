@@ -150,6 +150,11 @@ class JobWorker:
 
         engine = AnalyticsEngine(profile, w, h)
         self.engine = engine
+        tracker_cfg = self._write_tracker_config(src_fps)
+        params = profile.analysis_params
+        # Модели отдаём и слабые детекции: по ним ByteTrack продлевает уже
+        # существующие треки (новые создаются только от conf_threshold).
+        detect_conf = min(params.tracker_low_conf, params.conf_threshold)
 
         self._raw_video_path = self.out_dir / "_raw_annotated.mp4"
         fourcc = cv2.VideoWriter_fourcc(*"mp4v")
@@ -182,9 +187,9 @@ class JobWorker:
             results = model.track(
                 frame,
                 classes=class_ids,
-                conf=profile.analysis_params.conf_threshold,
-                iou=profile.analysis_params.iou_threshold,
-                tracker="bytetrack.yaml",
+                conf=detect_conf,
+                iou=params.iou_threshold,
+                tracker=str(tracker_cfg),
                 persist=True,
                 verbose=False,
                 device=DEVICE,
@@ -227,6 +232,30 @@ class JobWorker:
             self.status = JobStatus.completed
             # финальный снимок на конец ролика
             self._emit_history(engine.snapshot(self.video_time_sec))
+
+    def _write_tracker_config(self, src_fps: float) -> Path:
+        """Конфиг ByteTrack под этот запуск. Стандартный bytetrack.yaml держит
+        потерянный трек 30 кадров (0.5 с при 60 к/с) и получает от модели только
+        детекции выше conf_threshold — стоящая машина, у которой уверенность
+        колеблется около порога, теряется и возвращается под новым ID, а её
+        ожидание начинается заново."""
+        params = self.profile.analysis_params
+        cfg = {
+            "tracker_type": "bytetrack",
+            "track_high_thresh": params.conf_threshold,
+            "track_low_thresh": min(params.tracker_low_conf, params.conf_threshold),
+            "new_track_thresh": params.conf_threshold,
+            # ByteTrack держит потерянный трек track_buffer кадров без поправки
+            # на fps; обрабатывается каждый кадр источника.
+            "track_buffer": max(1, round(params.tracker_buffer_sec * src_fps)),
+            "match_thresh": 0.8,
+            "fuse_score": True,
+        }
+        path = self.out_dir / "tracker.yaml"
+        path.write_text(
+            "".join(f"{k}: {json.dumps(v)}\n" for k, v in cfg.items()), encoding="utf-8"
+        )
+        return path
 
     def _transcode_to_h264(self) -> None:
         """cv2.VideoWriter (mp4v) пишет MPEG-4 Part 2, который не проигрывается
