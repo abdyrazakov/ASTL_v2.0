@@ -46,8 +46,14 @@ export interface AnalysisParams {
   classes: string[]
   lane_switch_hysteresis_sec: number
   track_lost_grace_sec: number
+  stationary_track_retention_sec: number
+  reid_max_distance_bbox_h: number
+  reid_min_box_overlap: number
+  reid_new_track_window_sec: number
+  tracker_buffer_sec: number
+  tracker_low_conf: number
   speed_window_sec: number
-  stop_enter_speed: number
+  stop_max_drift_bbox_h: number
   stop_duration_threshold_sec: number
   stop_exit_speed: number
   queue_exit_duration_sec: number
