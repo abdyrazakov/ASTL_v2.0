@@ -31,7 +31,7 @@ backend/.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8420 --ap
 Dev-режим (два терминала: uvicorn на 8420 + `npm run dev` на 5173) работает так же,
 как в этапе 1.
 
-Тесты: `backend/.venv/bin/python -m pytest backend/tests/` (620 тестов, ~5 мин;
+Тесты: `backend/.venv/bin/python -m pytest backend/tests/` (634 теста, ~3.5 мин;
 этапы 1 и 2 вместе).
 
 ## 2. Редактор перекрёстка («Настройка перекрёстка»)
