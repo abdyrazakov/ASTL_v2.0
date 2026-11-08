@@ -5,12 +5,16 @@ interface AppState {
   profileId: string | null
   setVideoId: (id: string | null) => void
   setProfileId: (id: string | null) => void
+  // этап 2: выбранный профиль перекрёстка (общий для редактора и симуляции)
+  intersectionId: string | null
+  setIntersectionId: (id: string | null) => void
 }
 
 const Ctx = createContext<AppState | null>(null)
 
 const LS_VIDEO = 'astl.videoId'
 const LS_PROFILE = 'astl.profileId'
+const LS_INTERSECTION = 'astl.intersectionId'
 
 export function AppStateProvider({ children }: { children: ReactNode }) {
   const [videoId, setVideoIdState] = useState<string | null>(() => {
@@ -47,10 +51,27 @@ export function AppStateProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const [intersectionId, setIntersectionIdState] = useState<string | null>(() => {
+    try {
+      return localStorage.getItem(LS_INTERSECTION)
+    } catch {
+      return null
+    }
+  })
+  const setIntersectionId = (id: string | null) => {
+    setIntersectionIdState(id)
+    try {
+      if (id) localStorage.setItem(LS_INTERSECTION, id)
+      else localStorage.removeItem(LS_INTERSECTION)
+    } catch {
+      /* noop */
+    }
+  }
+
   useEffect(() => {}, [])
 
   return (
-    <Ctx.Provider value={{ videoId, profileId, setVideoId, setProfileId }}>
+    <Ctx.Provider value={{ videoId, profileId, setVideoId, setProfileId, intersectionId, setIntersectionId }}>
       {children}
     </Ctx.Provider>
   )

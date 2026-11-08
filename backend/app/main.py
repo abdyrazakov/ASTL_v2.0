@@ -10,7 +10,7 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from app.core.storage import OUTPUT_DIR
-from app.routers import jobs, profiles, videos
+from app.routers import intersections, jobs, profiles, simulations, videos
 
 
 class SPAStaticFiles(StaticFiles):
@@ -38,6 +38,9 @@ app.add_middleware(
 app.include_router(videos.router)
 app.include_router(profiles.router)
 app.include_router(jobs.router)
+# этап 2: профили перекрёстка и прогоны симуляции
+app.include_router(intersections.router)
+app.include_router(simulations.router)
 
 app.mount("/output", StaticFiles(directory=str(OUTPUT_DIR)), name="output")
 
