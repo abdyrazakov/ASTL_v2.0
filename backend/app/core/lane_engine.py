@@ -51,10 +51,19 @@ Point = tuple[float, float]
 BBox = tuple[float, float, float, float]  # x1, y1, x2, y2 в пикселях
 
 
+# Нижний край рамки детектора часто проходит не по точке контакта колёс с
+# дорогой, а чуть ниже (тень, блики, неточность рамки) — поэтому опорная
+# точка "низ по центру" берётся не ровно на нижней стороне, а приподнятой
+# на 2/5 расстояния от центра рамки до нижней стороны (= 0.3 высоты рамки
+# выше нижнего края).
+_BOTTOM_CENTER_RISE_FRACTION = 0.3
+
+
 def reference_point(bbox: BBox, mode: ReferencePointMode) -> Point:
     x1, y1, x2, y2 = bbox
     if mode == ReferencePointMode.bottom_center:
-        return ((x1 + x2) / 2, y2)
+        height = y2 - y1
+        return ((x1 + x2) / 2, y2 - _BOTTOM_CENTER_RISE_FRACTION * height)
     if mode == ReferencePointMode.bottom_left:
         return (x1, y2)
     if mode == ReferencePointMode.bottom_right:
