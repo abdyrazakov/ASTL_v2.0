@@ -21,3 +21,6 @@ frontend/dist/
 
 # Тестовые видео (большие, не для репозитория)
 trial_video.mp4
+
+# Случайные установки npm в корне (зависимости живут в frontend/ и presentation/)
+/node_modules/
