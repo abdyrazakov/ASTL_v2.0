@@ -29,6 +29,13 @@ export function TopNav({ right }: { right?: ReactNode }) {
         <NavLink to="/analysis" className={tabClass}>
           Анализ движения
         </NavLink>
+        <span className="w-px h-5 bg-[var(--border)] mx-1" aria-hidden />
+        <NavLink to="/intersection" className={tabClass}>
+          Настройка перекрёстка
+        </NavLink>
+        <NavLink to="/simulation" className={tabClass}>
+          Симуляция
+        </NavLink>
       </nav>
       <div className="flex-1" />
       <div className="flex items-center gap-2">{right}</div>

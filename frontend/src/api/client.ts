@@ -6,7 +6,7 @@ import type {
   VideoInfo,
 } from './types'
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+export async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     headers: init?.body && !(init.body instanceof FormData)
       ? { 'Content-Type': 'application/json', ...(init.headers || {}) }

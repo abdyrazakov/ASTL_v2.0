@@ -1,14 +1,23 @@
+import type { ReactNode } from 'react'
 import clsx from 'clsx'
 import type { LaneSnapshot } from '../../api/types'
 import { LOAD_COLORS, LOAD_LABELS, laneLoadLevel } from '../../lib/format'
 
-export function LaneCards({
-  lanes, selectedLaneId, onSelect,
-}: { lanes: LaneSnapshot[]; selectedLaneId: string | null; onSelect: (id: string | null) => void }) {
+// `extra` (необязательно) — дополнительный блок внутри карточки; этап 2 выводит
+// там новые показатели симуляции, не меняя общую часть карточки этапа 1.
+export function LaneCards<T extends LaneSnapshot = LaneSnapshot>({
+  lanes, selectedLaneId, onSelect, extra, emptyText,
+}: {
+  lanes: T[]
+  selectedLaneId: string | null
+  onSelect: (id: string | null) => void
+  extra?: (lane: T) => ReactNode
+  emptyText?: string
+}) {
   return (
     <div className="flex flex-col gap-2 p-3 overflow-y-auto">
       {lanes.length === 0 && (
-        <p className="text-sm text-[var(--text-faint)]">Данные появятся после начала анализа.</p>
+        <p className="text-sm text-[var(--text-faint)]">{emptyText ?? 'Данные появятся после начала анализа.'}</p>
       )}
       {lanes.map((lane) => {
         const level = laneLoadLevel(lane.queued, lane.avg_wait_sec)
@@ -52,6 +61,7 @@ export function LaneCards({
             {lane.queue_truncated_by_frame && (
               <p className="text-[10px] text-[var(--accent-amber)] mt-1.5">очередь в зоне наблюдения (кадр обрезает её)</p>
             )}
+            {extra?.(lane)}
           </button>
         )
       })}
