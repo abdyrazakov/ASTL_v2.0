@@ -3,7 +3,6 @@ const header = [
   'Кыргызский государственный технический университет им. И.Раззакова',
   'Институт информационных технологий',
   'Кафедра «Программное обеспечение компьютерных систем»',
-  'Направление: 710400 «Программная инженерия»',
 ]
 
 export function Title() {
@@ -17,8 +16,8 @@ export function Title() {
         ASTL: адаптивное управление светофором на основе машинного зрения и имитационного моделирования перекрёстка
       </h1>
       <div className="mt-[72px] flex gap-[72px] text-[23px]">
-        <div><span className="text-paint-dim">Выполнил:</span> Атамбек</div>
-        <div><span className="text-paint-dim">Преподаватель:</span> Жогаштиев Н.Т.</div>
+        <div><span className="text-paint-dim">Выполнил:</span> студент группы ПИ-4-25 Абдисаламов А.</div>
+        <div><span className="text-paint-dim">Научный руководитель:</span> Жогаштиев Н.Т.</div>
       </div>
     </div>
   )
