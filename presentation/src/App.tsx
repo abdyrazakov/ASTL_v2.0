@@ -81,6 +81,9 @@ export function App() {
               style={{ width: i === pos.index ? 44 : 18, background: i === pos.index ? '#eceae2' : i < pos.index ? 'rgba(236,234,226,.55)' : 'rgba(236,234,226,.18)' }} />
           ))}
         </div>
+        <div className="absolute right-[120px] bottom-[42px] text-[16px] tracking-[0.14em] text-paint-dim" aria-hidden="true">
+          {String(pos.index + 1).padStart(2, '0')} / {String(slides.length).padStart(2, '0')}
+        </div>
       </div>
     </div>
   )

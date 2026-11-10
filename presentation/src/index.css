@@ -53,14 +53,6 @@ body {
 .step { transition: opacity .45s ease, transform .45s cubic-bezier(.2, .7, .2, 1); }
 .step.off { opacity: 0; transform: translateY(8px); }
 
-/* Светофор на иллюстрации команды: цикл зелёный → жёлтый → красный */
-.tl-green { animation: tl-green 6s infinite; }
-.tl-yellow { animation: tl-yellow 6s infinite; }
-.tl-red { animation: tl-red 6s infinite; }
-@keyframes tl-green { 0%, 45% { opacity: 1; filter: drop-shadow(0 0 10px #2fbf71); } 46%, 100% { opacity: .16; filter: none; } }
-@keyframes tl-yellow { 0%, 45% { opacity: .16; } 46%, 62% { opacity: 1; filter: drop-shadow(0 0 10px #f59e0b); } 63%, 100% { opacity: .16; filter: none; } }
-@keyframes tl-red { 0%, 62% { opacity: .16; } 63%, 100% { opacity: 1; filter: drop-shadow(0 0 10px #e5484d); } }
-
 @media (prefers-reduced-motion: reduce) {
   .camera, .step { transition: none; }
   .enter { animation: none; }
